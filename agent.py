@@ -51,6 +51,7 @@ class Agent:
     self.stop_on_reward     = hyperparameters.get('stop_on_reward')       # stop training after reaching this number of rewards
     self.mini_batch_size    = hyperparameters.get('mini_batch_size')
     self.discount_factor_g  = hyperparameters.get('discount_factor')      # gamma
+    self.enable_double_dqn  = hyperparameters.get('enable_double_dqn')    # enables the use of the double dqn method
     self.network_sync_rate  = hyperparameters.get('network_sync_rate')
     self.replay_memory_size = hyperparameters.get('replay_memory_size')
     self.env_make_params    = hyperparameters.get('env_make_params', {})  # get optional environment-specific parameters, default to empty dict
@@ -224,12 +225,17 @@ class Agent:
     terminations  = torch.tensor(terminations).float().to(device)
     
     with torch.no_grad():
-      target_q = rewards + (1-terminations) * self.discount_factor_g * target_dqn(new_states).max(dim=1)[0]
-      '''
-        target_dqn(new_states)  => tensor([ [1, 2, 3], [4, 5, 6] ])
-          .max(dim=1)           => torch.return_types.max(values=tensor([3, 6]), indices=tensor([3, 0, 0, 1]))
-            [0]                 => tensor([3, 6])
-      '''
+      if self.enable_double_dqn:
+        best_action_from_policy = policy_dqn(states).argmax(dim=1)
+
+        target_q = rewards + (1-terminations) * self.discount_factor_g * target_dqn(new_states).max(dim=1).gather(dim=1, index=best_action_from_policy(dim=1)).squeeze()
+      else:
+        target_q = rewards + (1-terminations) * self.discount_factor_g * target_dqn(new_states).max(dim=1)[0]
+        '''
+          target_dqn(new_states)  => tensor([ [1, 2, 3], [4, 5, 6] ])
+            .max(dim=1)           => torch.return_types.max(values=tensor([3, 6]), indices=tensor([3, 0, 0, 1]))
+              [0]                 => tensor([3, 6])
+        '''
     
     #calculates Q values from current policy
     current_q = policy_dqn(states).gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
