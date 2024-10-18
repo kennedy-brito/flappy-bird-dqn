@@ -1,5 +1,6 @@
 import yaml
 import torch
+import random
 import itertools
 import gymnasium
 from dqn import DQN
@@ -34,6 +35,7 @@ class Agent:
     num_states = env.observation_space.shape[0]
 
     rewards_per_episode = []
+    epsilon_history = []
 
     policy_dqn = DQN(num_states, num_actions).to(device)
 
@@ -41,18 +43,35 @@ class Agent:
     if is_training:
       memory = ReplayMemory(self.replay_memory_size)
 
+      epsilon = self.epsilon_init
+
     for episode in itertools.count():
       state, _ = env.reset()
+
+      # torch operates in tensor, so we have to convert the state
+      state = torch.tensor(state, dtype=torch.float, device=device)
+      
       terminated = False
       episode_reward = 0
 
       while not terminated:
+
+
         # Next action
         # (feed the observation to your agent here)
-        action = env.action_space.sample()
+        # decides based in epsilon-greedy if the next action must be random or not
+        if is_training and random.random() < epsilon:
+          action = env.action_space.sample()
+          action = torch.tensor(action, dtype=torch.int64, device=device)
+
+        else:
+          with torch.no_grad():
+            # gets the action index who has the maximum reward based in current state
+            action = policy_dqn(state.unsqueeze(dim=0)).squeeze().argmax()
+          
 
         # processing
-        new_state, reward, terminated, _, info = env.step(action)
+        new_state, reward, terminated, _, info = env.step(action.item())
 
         # accumulate reward
         episode_reward += reward
@@ -60,8 +79,21 @@ class Agent:
         if is_training:
           memory.append((state, action, new_state, reward, terminated))
         
+        #converts to tensor
+        new_state = torch.tensor(new_state, dtype=torch.float, device=device)
+        reward = torch.tensor(reward, dtype=torch.float, device=device)
+        
         # move to new state
         state = new_state
 
       rewards_per_episode.append(episode_reward)
-    
+
+      # we decrease epsilon in the end of each episode
+
+      epsilon = max(epsilon * self.epsilon_decay, self.epsilon_min)
+      epsilon_history.append(epsilon)
+
+
+if __name__ == "__main__":
+  agent = Agent('cartpole1')
+  agent.run(is_training=True, render=True)
