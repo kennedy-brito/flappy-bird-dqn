@@ -136,23 +136,41 @@ class Agent:
 
   def optimize(self, mini_batch, policy_dqn, target_dqn):
 
-    for state, action, new_state, reward, terminated in mini_batch:
-      
-      if terminated:
-        target_q = reward
-      else:
-        with torch.no_grad():
-          target_q = reward + self.discount_factor_g * target_dqn(new_state).max()
-      
-      current_q = policy_dqn(state)
+    # transpose the list of experience and separate each element
+    states, actions, new_states, rewards, terminations = zip(*mini_batch)
 
-      # compute loss for the whole minibatch
-      loss = self.loss_fn(current_q, target_q)
+    # stack tensors to create batch tensors
+    # tensor([ [1, 2, 3] ])
+    states        = torch.stack(states)
+    actions       = torch.stack(actions)
+    rewards       = torch.stack(rewards)
+    new_states    = torch.stack(new_states)
+    terminations  = torch.tensor(terminations).float().to(device)
+    
+    with torch.no_grad():
+      target_q = rewards + (1-terminations) * self.discount_factor_g * target_dqn(new_states).max(dim=1)[0]
+      '''
+        target_dqn(new_states)  => tensor([ [1, 2, 3], [4, 5, 6] ])
+          .max(dim=1)           => torch.return_types.max(values=tensor([3, 6]), indices=tensor([3, 0, 0, 1]))
+            [0]                 => tensor([3, 6])
+      '''
+    
+    #calculates Q values from current policy
+    current_q = policy_dqn(states).gather(dim=1, index=actions.unsqueeze(dim=1)).squeeze()
+    '''
+    policy_dqn(states)    => tensor([[1, 2, 3], [4, 5, 6]])
+      actions.unsqueeze(dim=1)
+      .gather(1, )index actions.unsqueeze(dim=1) => 
+        .squeeze => 
+    '''
 
-      # optimize the model
-      self.optimizer.zero_grad()  # clear gradients
-      loss.backwards()            # compute gradients (backpropagation)
-      self.optimizer.step()       # update network parameters i.e. weight and bias
+    # compute loss for the whole minibatch
+    loss = self.loss_fn(current_q, target_q)
+
+    # optimize the model
+    self.optimizer.zero_grad()  # clear gradients
+    loss.backward()            # compute gradients (backpropagation)
+    self.optimizer.step()       # update network parameters i.e. weight and bias
 
 if __name__ == "__main__":
   agent = Agent('cartpole1')
