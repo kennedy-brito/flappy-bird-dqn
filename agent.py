@@ -65,7 +65,7 @@ class Agent:
       step_count = 0
 
       # policy optimizer. "Adam" can be swapped by something else
-      self.optimizer = torch.optin.Adam(
+      self.optimizer = torch.optim.Adam(
         policy_dqn.parameters(), 
         lr=self.learning_rate)
 
@@ -102,14 +102,14 @@ class Agent:
         # accumulate reward
         episode_reward += reward
 
+        #converts to tensor
+        new_state = torch.tensor(new_state, dtype=torch.float, device=device)
+        reward = torch.tensor(reward, dtype=torch.float, device=device)
         if is_training:
           memory.append((state, action, new_state, reward, terminated))
 
           step_count+=1
         
-        #converts to tensor
-        new_state = torch.tensor(new_state, dtype=torch.float, device=device)
-        reward = torch.tensor(reward, dtype=torch.float, device=device)
         
         # move to new state
         state = new_state
@@ -142,7 +142,7 @@ class Agent:
         target_q = reward
       else:
         with torch.no_grad():
-          target_q = reward + self.discount_factor_g * target_q(new_state).max()
+          target_q = reward + self.discount_factor_g * target_dqn(new_state).max()
       
       current_q = policy_dqn(state)
 
