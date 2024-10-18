@@ -5,3 +5,4 @@ cartpole1:
   epsilon_init: 1
   epsilon_decay: 0.9995
   epsilon_min: 0.05
+  network_sync_rate: 10

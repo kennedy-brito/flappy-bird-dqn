@@ -24,6 +24,7 @@ class Agent:
     self.epsilon_init       = hyperparameters.get('epsilon_init')
     self.epsilon_decay      = hyperparameters.get('epsilon_decay')
     self.mini_batch_size    = hyperparameters.get('mini_batch_size')
+    self.network_sync_rate  = hyperparameters.get('network_sync_rate')
     self.replay_memory_size = hyperparameters.get('replay_memory_size')
     
   def run(self, is_training = True, render=False):
@@ -45,6 +46,18 @@ class Agent:
 
       epsilon = self.epsilon_init
 
+      # we create a target network, she is the model who will constantly change
+      # because of this she is unstable
+      target_dqn = DQN(num_states, num_actions).to(device)
+      
+      # we sync their policy's
+      # this should be redone a number of times, normally we sync after a number of episodes
+      target_dqn.load_state_dict(policy_dqn.state_dict())
+
+      # track number of steps taken, used to syncing policy => target network
+      step_count = 0
+
+
     for episode in itertools.count():
       state, _ = env.reset()
 
@@ -55,6 +68,7 @@ class Agent:
       episode_reward = 0
 
       while not terminated:
+        
 
 
         # Next action
@@ -78,6 +92,8 @@ class Agent:
 
         if is_training:
           memory.append((state, action, new_state, reward, terminated))
+
+          step_count+=1
         
         #converts to tensor
         new_state = torch.tensor(new_state, dtype=torch.float, device=device)
@@ -92,6 +108,19 @@ class Agent:
 
       epsilon = max(epsilon * self.epsilon_decay, self.epsilon_min)
       epsilon_history.append(epsilon)
+
+      # if we have enough experience has been collected
+      if len(memory) > self.mini_batch_size:
+
+        # sample from memory
+        mini_batch = memory.sample(self.mini_batch_size)
+
+        self.optimize(mini_batch, policy_dqn, target_dqn)
+
+        # copy policy network to target network after a certain number of steps
+        if step_count > self.network_sync_rate:
+          target_dqn.load_state_dict(policy_dqn.state_dict())
+          step_count = 0
 
 
 if __name__ == "__main__":
