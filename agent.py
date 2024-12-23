@@ -65,7 +65,7 @@ class Agent:
     self.MODEL_FILE = os.path.join(RUNS_DIR, f'{self.hyperparameter_set}.pt')
     self.GRAPH_FILE = os.path.join(RUNS_DIR, f'{self.hyperparameter_set}.png')
 
-  def run(self, is_training = True, render=False):
+  def run(self, is_training = True, render=False, continue_last_model = True):
     
     if is_training:
       start_time = datetime.now()
@@ -88,6 +88,8 @@ class Agent:
 
     # create policy and target network, Number of nodes can be adjusted
     policy_dqn = DQN(num_states, num_actions, self.fc1_nodes).to(device)
+    if continue_last_model:
+      policy_dqn.load_state_dict(torch.load(self.MODEL_FILE))
 
     # during training we have to know what each action made
     if is_training:
@@ -186,13 +188,14 @@ class Agent:
             torch.save(policy_dqn.state_dict(), self.MODEL_FILE)
             best_reward = episode_reward
 
-        # update graph every x second
+        #region graph update
+          # update graph every x second
         current_time = datetime.now()
 
-        if current_time - last_graph_update_time > timedelta(seconds=10):
+        if current_time - last_graph_update_time > timedelta(seconds=50):
           self.save_graph(rewards_per_episode, epsilon_history)
           last_graph_update_time = current_time
-
+        #end region 
 
         # if we have enough experience has been collected
         if len(memory) > self.mini_batch_size:
@@ -226,9 +229,10 @@ class Agent:
     
     with torch.no_grad():
       if self.enable_double_dqn:
-        best_action_from_policy = policy_dqn(states).argmax(dim=1)
+        best_action_from_policy = policy_dqn(new_states).argmax(dim=1)
 
-        target_q = rewards + (1-terminations) * self.discount_factor_g * target_dqn(new_states).max(dim=1).gather(dim=1, index=best_action_from_policy(dim=1)).squeeze()
+        target_q = rewards + (1-terminations) * self.discount_factor_g * \
+          target_dqn(new_states).gather(dim=1, index=best_action_from_policy.unsqueeze(dim=1)).squeeze()
       else:
         target_q = rewards + (1-terminations) * self.discount_factor_g * target_dqn(new_states).max(dim=1)[0]
         '''
